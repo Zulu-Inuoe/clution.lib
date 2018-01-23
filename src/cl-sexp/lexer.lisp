@@ -8,7 +8,7 @@
 ;;;with this software. If not, see
 ;;;<http://creativecommons.org/publicdomain/zero/1.0/>.
 
-(in-package #:clution.lib.asd)
+(in-package #:clution.lib.cl-sexp)
 
 (defun %make-lexeme (type text properties)
   (list :type type :text text :properties (copy-list properties)))

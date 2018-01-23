@@ -97,24 +97,6 @@
                    :parent parent
                    :text prefix-whitespace)))
 
-(defun %parent-node-p (node)
-  (typep node 'sexp-parent-node))
-
-(defun %list-node-p (node)
-  (typep node 'sexp-list-node))
-
-(defun %whitespace-node-p (node)
-  (typep node 'sexp-whitespace-node))
-
-(defun %opaque-node-p (node)
-  (typep node 'sexp-opaque-node))
-
-(defun %symbol-node-p (node)
-  (typep node 'sexp-symbol-node))
-
-(defun %string-node-p (node)
-  (typep node 'sexp-string-node))
-
 (defun %system-node-p (node)
   (and (%list-node-p node)
        (when-let ((first-child (efirst (vchildren node))))

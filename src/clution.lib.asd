@@ -17,11 +17,14 @@
   :components
   ((:file "%package")
    (:file "util")
+   (:module "cl-sexp"
+    :components
+    ((:file "package")
+     (:file "parser")
+     (:file "lexer")))
    (:module "asd"
     :components
     ((:file "package")
-     (:file "lexer")
-     (:file "parser")
      (:file "asd")))
    (:file "package"))
   :depends-on

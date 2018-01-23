@@ -14,6 +14,7 @@
    #:alexandria
    #:cl
    #:cl-arrows
+   #:clution.lib.cl-sexp
    #:enumerable
    #:parse-float)
   (:export
