@@ -51,3 +51,38 @@ That is, if it is either a macro character that is terminatting, or if it is whi
   (if-let ((cell (%cell-after item list :test test)))
     (car cell)
     default))
+
+(defvar *%eol-sequences*
+  (list
+   (cons :windows '(#\Return #\Newline))
+   (cons :unix '(#\Newline))
+   (cons :old-mac '(#\Return))))
+
+(defun %guess-eol-style (file-path &optional (default :unix))
+  (let ((scores
+          (list
+           (cons :windows 0)
+           (cons :unix 0)
+           (cons :old-mac 0))))
+    (with-input-from-file (stream file-path :external-format :utf-8)
+      (loop
+        :for c := (read-char stream nil nil)
+        :while c
+        :do
+           (switch (c)
+             (#\Return
+              (switch ((read-char stream nil nil))
+                (#\Newline
+                 (incf (cdr (assoc :windows scores))))
+                (t
+                 (incf (cdr (assoc :old-mac scores))))))
+             (#\Newline
+              (incf (cdr (assoc :unix scores)))))))
+
+    (setf scores (stable-sort scores #'> :key #'cdr))
+    (cond
+      ((every (lambda (cell) (zerop (cdr cell))) scores)
+       ;;All zero
+       default)
+      (t ;;Possibly mixed, but return most popular
+       (caar scores)))))

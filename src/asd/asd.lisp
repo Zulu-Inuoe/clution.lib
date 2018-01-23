@@ -492,41 +492,9 @@
     :type list
     :accessor asd-file-nodes)))
 
-(defvar *%eol-sequences*
-  (list
-   (cons :windows '(#\Return #\Newline))
-   (cons :unix '(#\Newline))
-   (cons :old-mac '(#\Return))))
-
-(defun %guess-eol-style (nodes &optional (default :unix))
-  (let ((scores
-          (mapcar (lambda (cell) (cons (car cell) 0)) *%eol-sequences*)))
-    (labels ((node-eol-scores (node)
-               (cond
-                 ((%opaque-node-p node)
-                  (let ((text (opaque-node-text node)))
-                    (when-let ((style (car
-                                       (rassoc-if
-                                        (lambda (seq)
-                                          (ends-with-subseq seq text))
-                                        *%eol-sequences*))))
-                      (incf (cdr (assoc style scores))))))
-                 ((%parent-node-p node)
-                  (dolist (child (children node))
-                    (node-eol-scores child))))))
-      (dolist (node nodes)
-        (node-eol-scores node)))
-    (setf scores (stable-sort scores #'> :key #'cdr))
-    (cond
-      ((every (lambda (cell) (zerop (cdr cell))) scores)
-       ;;All zero
-       default)
-      (t ;;Possibly mixed, but return most popular
-       (caar scores)))))
-
 (defmethod initialize-instance :after ((obj asd-file) &key)
   (setf (slot-value obj 'nodes) (to-list (%parse-sexp-file (asd-file-path obj)))
-        (slot-value obj 'eol-style) (%guess-eol-style (asd-file-nodes obj) :unix)))
+        (slot-value obj 'eol-style) (%guess-eol-style (asd-file-path obj) :unix)))
 
 (defun read-asd-file (path)
   (make-instance 'asd-file :path path))

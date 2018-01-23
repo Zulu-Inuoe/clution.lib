@@ -17,9 +17,12 @@
    #:parse-float)
   (:export
    ;;;util
+   #:*%eol-sequences*
+
    #:%whitespacep
    #:%terminating-p
    #:%cell-before
    #:%cell-after
    #:%item-before
-   #:%item-after))
+   #:%item-after
+   #:%guess-eol-style))
