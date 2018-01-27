@@ -86,3 +86,139 @@ That is, if it is either a macro character that is terminatting, or if it is whi
        default)
       (t ;;Possibly mixed, but return most popular
        (caar scores)))))
+
+(defun %read-from-file (filename &rest args
+                        &key
+                          (eof-error-p nil)
+                          (eof-value nil)
+                          (if-does-not-exist nil if-does-not-exist-p)
+                          (direction nil direction-p)
+                        &allow-other-keys)
+  (declare (ignore if-does-not-exist direction))
+  (when if-does-not-exist-p
+    (error "Can't specify :IF-DOES-NOT-EXIST for READ-FROM-FILE."))
+  (when direction-p
+    (error "Can't specify :DIRECTION for READ-FROM-FILE."))
+
+  (let ((file-stream (apply #'open filename :direction :input :if-does-not-exist nil args)))
+    (cond
+      (file-stream
+       (unwind-protect
+            (read file-stream eof-error-p eof-value)
+         (close file-stream)))
+      (t
+       (if eof-error-p
+           (error 'end-of-file :stream nil)
+           eof-value)))))
+
+(defun %resolve-directives (pathname
+                            &aux
+                              (device (pathname-device pathname))
+                              (host (pathname-host pathname)))
+  "Attempts to resolve special directives in the directory component of `pathname'.
+:UP and :BACK will be interpreted as 'eliminating' the next directory up.
+:HOME will resolved to `user-homedir-pathname', using the same `host' component as `pathname'
+
+eg:
+/foo/bar/baz/../ => /foo/bar/
+
+Note that the parent directory of root is itself. Therefore
+/../../../../ => /
+
+When `pathname' is relative, any such directives that cannot be resolved will be left intact
+foo/../../bar/ => ../bar/"
+  (labels ((recurse (components)
+             (cond
+               ((null components) nil)
+               ((member (car components) '(:up :back))
+                (let ((res (recurse (cdr components))))
+                  (cond
+                    ((null res)
+                     (list (car components) :relative))
+                    ((member (car res) '(:up :back :relative))
+                     ;;keep it and ourselves
+                     (cons (car components) res))
+                    ((eq (car res) :absolute)
+                     (list :absolute))
+                    (t
+                     ;;skip it
+                     (cdr res)))))
+               ((eq (car components) :home)
+                (let ((homedir (user-homedir-pathname host)))
+                  (setf device (pathname-device homedir)
+                        host (pathname-host homedir))
+                  (reverse (uiop:normalize-pathname-directory-component
+                            (pathname-directory homedir)))))
+               (t
+                (cons (car components) (recurse (cdr components)))))))
+    (make-pathname
+     :directory
+     (uiop:normalize-pathname-directory-component
+      (reverse
+       (recurse
+        (reverse
+         (uiop:normalize-pathname-directory-component
+          (pathname-directory pathname))))))
+     :device device
+     :host host
+     :defaults pathname)))
+
+(defun %expand-pathname (pathname &optional (base *default-pathname-defaults*))
+  (%resolve-directives
+   (uiop:merge-pathnames* pathname (uiop:merge-pathnames* base))))
+
+(defun %relative-pathname (pathname &optional (base *default-pathname-defaults*))
+  "This function tries to return a relative name that is equivalent to filename, assuming the result will be interpreted relative to directory (an absolute directory name or directory file name). If directory is omitted or nil, it defaults to the current buffer's default directory.
+
+On some operating systems, an absolute file name begins with a device name. On such systems, filename has no relative equivalent based on directory if they start with two different device names. In this case, file-relative-name returns filename in absolute form."
+  (setf pathname (%expand-pathname pathname)
+        base (uiop:pathname-directory-pathname (%expand-pathname base)))
+  (cond
+    ((not (equalp (pathname-device pathname) (pathname-device base)))
+     pathname)
+    ((uiop:pathname-equal pathname base)
+     (if (uiop:directory-pathname-p pathname)
+         #P"./"
+         #P"."))
+    ((uiop:subpathp pathname base)
+     (uiop:enough-pathname pathname base))
+    (t
+     (let ((result-dir (list :relative)))
+       (labels ((climb (base)
+                  (cond
+                    ((uiop:pathname-equal pathname base)
+                     (make-pathname
+                      :device nil
+                      :host nil
+                      :directory (uiop:denormalize-pathname-directory-component (nreverse result-dir))
+                      :defaults base))
+                    ((uiop:subpathp pathname base)
+                     (let* ((subpath (uiop:enough-pathname pathname base)))
+                       (make-pathname
+                        :device nil
+                        :host nil
+                        :directory
+                        (uiop:denormalize-pathname-directory-component
+                         (append
+                          (nreverse result-dir)
+                          (rest
+                           (uiop:normalize-pathname-directory-component
+                            (pathname-directory subpath)))))
+                        :defaults subpath)))
+                    (t
+                     (push :up result-dir)
+                     (climb
+                      (make-pathname
+                       :directory
+                       (uiop:denormalize-pathname-directory-component
+                        (butlast
+                         (uiop:normalize-pathname-directory-component
+                          (pathname-directory base))))
+                       :defaults base))))))
+         (climb base))))))
+
+(defun %ensure-relative-pathname (pathname &optional (base *default-pathname-defaults*))
+  (let ((ret (%relative-pathname pathname base)))
+    (when (uiop:absolute-pathname-p pathname)
+      (error "could not make pathname relative: ~A" pathname))
+    ret))

@@ -25,4 +25,8 @@
    #:%cell-after
    #:%item-before
    #:%item-after
-   #:%guess-eol-style))
+   #:%guess-eol-style
+   #:%read-from-file
+   #:%expand-pathname
+   #:%relative-pathname
+   #:%ensure-relative-pathname))
