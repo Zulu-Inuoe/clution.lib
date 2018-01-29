@@ -26,6 +26,10 @@
     :components
     ((:file "package")
      (:file "asd")))
+   (:module "clu"
+    :components
+    ((:file "package")
+     (:file "clu")))
    (:file "package"))
   :depends-on
   (#:alexandria
