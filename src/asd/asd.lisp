@@ -10,8 +10,6 @@
 
 (in-package #:clution.lib.asd)
 
-(defvar *%eol-sequence* '(#\Newline))
-
 (defun %coerce-component-path (path)
   (etypecase path
     (null nil)
@@ -70,66 +68,11 @@
        (%symbol-node-p (sexp-list-nth component 0))
        (sexp-symbol-match (sexp-list-nth component 0) "MODULE" :keyword)))
 
-(defun %node-indention-level (node
-                              &aux
-                                (parent (sexp-node-parent node)))
-  (cond
-    ((null parent)
-     0)
-    ((eq (first (children parent)) node)
-     (1+ (%node-indention-level parent)))
-    (t
-     (loop
-       :for prev-cell := (%cell-before node (children parent))
-         :then (%cell-before prev-node (children parent))
-       :for prev-node := (car prev-cell)
-       :while (%whitespace-node-p prev-node)
-       :sum (ecount (take-while (reverse (opaque-node-text prev-node)) (lambda (c) (char= c #\Space))))))))
-
-(defun %make-indent-node (indent skip-newline-p &optional parent)
-  (let ((prefix-whitespace
-          (with-output-to-string (res)
-            (unless skip-newline-p
-              (do-enumerable (c *%eol-sequence*)
-                (format res "~C" c)))
-            (format res "~A" (make-string indent :initial-element #\Space)))))
-    (make-instance 'sexp-whitespace-node
-                   :parent parent
-                   :text prefix-whitespace)))
-
 (defun %system-node-p (node)
   (and (%list-node-p node)
        (when-let ((first-child (efirst (vchildren node))))
          (and (%symbol-node-p first-child)
               (sexp-symbol-match first-child "DEFSYSTEM")))))
-
-(defun %opaque-node-ends-with-newline (node)
-  (and (%opaque-node-p node)
-       (let ((text (opaque-node-text node)))
-         (or
-          (ends-with-subseq '(#\Return #\Newline) text)
-          (ends-with #\Newline text)
-          (ends-with #\Return text)))))
-
-(defun %append-to-list-node (list-node new-node
-                             &aux
-                               (indent (+ (%node-indention-level list-node)
-                                          (if (%system-node-p list-node) 2 1))))
-  ;;Set the parent
-  (setf (sexp-node-parent new-node) list-node)
-
-  ;;Find the last non-whitespace child
-  (let ((last-child (elast* (children list-node) (complement #'%whitespace-node-p))))
-    (cond
-      (last-child
-       (let* ((cell (member last-child (children list-node))))
-         (setf (cdr cell)
-               (list
-                (%make-indent-node indent (%opaque-node-ends-with-newline last-child) list-node)
-                new-node))))
-      (t
-       ;;We are the first non-whitespace child
-       (setf (children list-node) (list new-node))))))
 
 (defun %create-file-component (name &key parent pathname)
   (let ((nodes ()))
@@ -215,25 +158,7 @@
   (sexp-list-getf component "IN-ORDER-TO"))
 
 (defun component-remove (component)
-  (let* ((parent (sexp-node-parent component))
-         (cell (member component (children parent))))
-    ;;Delete any white space that follows it
-    (loop :while (and (cdr cell) (%whitespace-node-p (cadr cell)))
-          :do (setf (cdr cell) (cddr cell)))
-
-    ;;If it's the last node in the parent, remove whitespace before it, too
-    (when (null (cdr cell))
-      (loop
-        :for prev-cell := (%cell-before component (children  parent))
-        :while (and prev-cell (%whitespace-node-p (car prev-cell)))
-        :do (setf (children parent) (delete (car prev-cell) (children parent)))))
-
-    ;;Delete it
-    (setf (children parent) (delete component (children parent)))
-
-    ;;If there is only whitespace left, then clear out all children
-    (when (all (children parent) #'%whitespace-node-p)
-      (setf (children parent) nil))))
+  (%delete-from-list-node (sexp-node-parent component) component))
 
 (defun module-name (module)
   (component-name module))
@@ -246,8 +171,9 @@
 
 (defun module-ensure-components (module)
   (unless (module-components module)
-    (%append-to-list-node module (make-instance 'sexp-symbol-node :name "COMPONENTS" :package :keyword))
-    (%append-to-list-node module (make-instance 'sexp-list-node :children ())))
+    (let ((indent-offset (if (%system-node-p module) 2 1)))
+      (%append-to-list-node module (make-instance 'sexp-symbol-node :name "COMPONENTS" :package :keyword) indent-offset)
+      (%append-to-list-node module (make-instance 'sexp-list-node :children ()) indent-offset)))
   (values))
 
 (defun module-component-by-path (module component-path)
@@ -266,8 +192,9 @@
 
 (defun module-ensure-depends-on (module)
   (unless (component-depends-on module)
-    (%append-to-list-node module (make-instance 'sexp-symbol-node :name "DEPENDS-ON" :package :keyword))
-    (%append-to-list-node module (make-instance 'sexp-list-node :children ())))
+    (let ((indent-offset (if (%system-node-p module) 2 1)))
+      (%append-to-list-node module (make-instance 'sexp-symbol-node :name "DEPENDS-ON" :package :keyword) indent-offset)
+      (%append-to-list-node module (make-instance 'sexp-list-node :children ()) indent-offset)))
   (values))
 
 ;;;; System accessors
@@ -444,25 +371,7 @@
                               (string= (%coerce-name-string node) name)))))
         (unless node
           (error "no such dependency: '~A'" name))
-
-        (let* ((cell (member node (children depends-on))))
-          ;;Delete any white space that follows it
-          (loop :while (and (cdr cell) (%whitespace-node-p (cadr cell)))
-                :do (setf (cdr cell) (cddr cell)))
-
-          ;;If it's the last node in the parent, remove whitespace before it, too
-          (when (null (cdr cell))
-            (loop
-              :for prev-cell := (%cell-before node (children depends-on))
-              :while (and prev-cell (%whitespace-node-p (car prev-cell)))
-              :do (setf (children depends-on) (delete (car prev-cell) (children depends-on)))))
-
-          ;;Delete it
-          (setf (children depends-on) (delete node (children depends-on)))
-
-          ;;If there is only whitespace left, then clear out all children
-          (when (all (children depends-on) #'%whitespace-node-p)
-            (setf (children depends-on) nil)))))))
+        (%delete-from-list-node depends-on node)))))
 
 (defun system-move-component-up (system component-path)
   (setf component-path (%coerce-component-path component-path))

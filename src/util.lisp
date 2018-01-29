@@ -58,6 +58,8 @@ That is, if it is either a macro character that is terminatting, or if it is whi
    (cons :unix '(#\Newline))
    (cons :old-mac '(#\Return))))
 
+(defvar *%eol-sequence* '(#\Newline))
+
 (defun %guess-eol-style (file-path &optional (default :unix))
   (let ((scores
           (list

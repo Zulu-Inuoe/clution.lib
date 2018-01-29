@@ -18,6 +18,7 @@
   (:export
    ;;;util
    #:*%eol-sequences*
+   #:*%eol-sequence*
 
    #:%whitespacep
    #:%terminating-p
