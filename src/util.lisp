@@ -113,6 +113,13 @@ That is, if it is either a macro character that is terminatting, or if it is whi
            (error 'end-of-file :stream nil)
            eof-value)))))
 
+(defun %pathname-equal (p1 p2)
+  "Tests if `p1' and `p2' are reasonably equal."
+  (#+windows string-equal
+   #-windows string=
+   (namestring p1)
+   (namestring p2)))
+
 (defun %resolve-directives (pathname
                             &aux
                               (device (pathname-device pathname))
@@ -175,27 +182,30 @@ foo/../../bar/ => ../bar/"
 On some operating systems, an absolute file name begins with a device name. On such systems, filename has no relative equivalent based on directory if they start with two different device names. In this case, file-relative-name returns filename in absolute form."
   (setf pathname (%expand-pathname pathname)
         base (uiop:pathname-directory-pathname (%expand-pathname base)))
-  (cond
-    ((not (equalp (pathname-device pathname) (pathname-device base)))
-     pathname)
-    ((uiop:pathname-equal pathname base)
-     (if (uiop:directory-pathname-p pathname)
-         #P"./"
-         #P"."))
-    ((uiop:subpathp pathname base)
-     (uiop:enough-pathname pathname base))
-    (t
-     (let ((result-dir (list :relative)))
-       (labels ((climb (base)
-                  (cond
-                    ((uiop:pathname-equal pathname base)
-                     (make-pathname
-                      :device nil
-                      :host nil
-                      :directory (uiop:denormalize-pathname-directory-component (nreverse result-dir))
-                      :defaults base))
-                    ((uiop:subpathp pathname base)
-                     (let* ((subpath (uiop:enough-pathname pathname base)))
+  (let (subpath)
+    (cond
+      ((not (equalp (pathname-device pathname) (pathname-device base)))
+       pathname)
+      ((%pathname-equal pathname base)
+       (if (uiop:directory-pathname-p pathname)
+           #P"./"
+           #P"."))
+      ((and (setf subpath (pathname (enough-namestring pathname base)))
+            (uiop:relative-pathname-p subpath))
+       subpath)
+      (t
+       (let ((result-dir (list :relative)))
+         (labels ((climb (base)
+                    (cond
+                      ((%pathname-equal pathname base)
+                       (make-pathname
+                        :device nil
+                        :host nil
+                        :directory (uiop:denormalize-pathname-directory-component
+                                    (nreverse result-dir))
+                        :defaults base))
+                      ((and (setf subpath (pathname (enough-namestring pathname base)))
+                            (uiop:relative-pathname-p subpath))
                        (make-pathname
                         :device nil
                         :host nil
@@ -206,18 +216,18 @@ On some operating systems, an absolute file name begins with a device name. On s
                           (rest
                            (uiop:normalize-pathname-directory-component
                             (pathname-directory subpath)))))
-                        :defaults subpath)))
-                    (t
-                     (push :up result-dir)
-                     (climb
-                      (make-pathname
-                       :directory
-                       (uiop:denormalize-pathname-directory-component
-                        (butlast
-                         (uiop:normalize-pathname-directory-component
-                          (pathname-directory base))))
-                       :defaults base))))))
-         (climb base))))))
+                        :defaults subpath))
+                      (t
+                       (push :up result-dir)
+                       (climb
+                        (make-pathname
+                         :directory
+                         (uiop:denormalize-pathname-directory-component
+                          (butlast
+                           (uiop:normalize-pathname-directory-component
+                            (pathname-directory base))))
+                         :defaults base))))))
+           (climb base)))))))
 
 (defun %ensure-relative-pathname (pathname &optional (base *default-pathname-defaults*))
   (let ((ret (%relative-pathname pathname base)))

@@ -35,4 +35,5 @@
   (#:alexandria
    #:cl-arrows
    #:enumerable
-   #:parse-float))
+   #:parse-float
+   #:trivial-features))

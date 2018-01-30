@@ -116,7 +116,9 @@
     (unless dir
       (error "dir does not exist at path: '~A'" dir-path))
     (dir-ensure-items dir)
-    (let ((items (clu-items clu)))
+    (let ((items (dir-node-items dir)))
+      (when (efirst* (vchildren items) (lambda (c) (and (%dir-node-p c) (string= (string-node-string (dir-node-name c)) name))))
+        (error "dir already contains dir with name '~A'" name))
       (%append-to-list-node
        items
        (make-instance
@@ -124,10 +126,14 @@
         :children
         (list
          (make-instance 'sexp-symbol-node :name "DIR" :package :keyword)
-         (%make-indent-node (1+ (%node-indention-level items)) nil)
+         (%make-indent-node (+ (%node-indention-level items) 2) nil)
          (make-instance 'sexp-symbol-node :name "NAME" :package :keyword)
          (make-instance 'sexp-whitespace-node :text " ")
-         (make-instance 'sexp-string-node :string name)))))))
+         (make-instance 'sexp-string-node :string name)
+         (%make-indent-node (+ (%node-indention-level items) 2) nil)
+         (make-instance 'sexp-symbol-node :name "ITEMS" :package :keyword)
+         (%make-indent-node (+ (%node-indention-level items) 2) nil)
+         (make-instance 'sexp-list-node)))))))
 
 (defun clu-remove-dir (clu dir-path)
   (let ((dir (dir-by-path clu dir-path)))
@@ -135,12 +141,17 @@
       (error "dir does not exist at path: '~A'" dir-path))
     (%delete-from-list-node (sexp-node-parent dir) dir)))
 
-(defun clu-add-system (clu dir-path path type)
+(defun clu-add-system (clu dir-path system-path system-type)
   (let ((dir (dir-by-path clu dir-path)))
     (unless dir
       (error "dir does not exist at path: '~A'" dir-path))
     (dir-ensure-items dir)
-    (let ((items (clu-items clu)))
+    (let ((items (dir-node-items dir)))
+      (when (efirst* (vchildren items)
+                     (lambda (sys-node)
+                       (%pathname-equal (string-node-string (system-node-path sys-node))
+                                        system-path)))
+        (error "clu already contains system '~A'" system-path))
       (%append-to-list-node
        items
        (make-instance
@@ -148,14 +159,14 @@
         :children
         (list
          (make-instance 'sexp-symbol-node :name "SYSTEM" :package :keyword)
-         (%make-indent-node (1+ (%node-indention-level items)) nil)
+         (%make-indent-node (+ (%node-indention-level items) 2) nil)
          (make-instance 'sexp-symbol-node :name "PATH" :package :keyword)
          (make-instance 'sexp-whitespace-node :text " ")
-         (make-instance 'sexp-string-node :string path)
-         (%make-indent-node (1+ (%node-indention-level items)) nil)
+         (make-instance 'sexp-string-node :string (namestring system-path))
+         (%make-indent-node (+ (%node-indention-level items) 2) nil)
          (make-instance 'sexp-symbol-node :name "TYPE" :package :keyword)
          (make-instance 'sexp-whitespace-node :text " ")
-         (make-instance 'sexp-symbol-node :name (symbol-name type) :package :keyword)))))))
+         (make-instance 'sexp-symbol-node :name (symbol-name system-type) :package :keyword)))))))
 
 (defun clu-remove-system (clu dir-path system-path)
   (let ((dir (dir-by-path clu dir-path)))
@@ -166,8 +177,8 @@
         (error "no such system '~A' at path '~A'" system-path dir-path))
       (let ((system (efirst* (vchildren items)
                              (lambda (sys-node)
-                               (string= (string-node-string (system-node-path sys-node))
-                                        system-path)))))
+                               (%pathname-equal (string-node-string (system-node-path sys-node))
+                                                system-path)))))
         (unless system
           (error "no such system '~A' at path '~A'" system-path dir-path))
         (%delete-from-list-node items system)))))
@@ -191,7 +202,7 @@
                   (if-let ((clu-dir (clu-clu-dir clu)))
                     (string-node-string clu-dir)
                     ".clu/")
-                    (uiop:pathname-directory-pathname path)))))
+                  (uiop:pathname-directory-pathname path)))))
     (nreverse plist)))
 
 (defclass clu-file ()
@@ -228,9 +239,9 @@
     (when (and (any (clu-file-nodes clu-file))
                (not (%opaque-node-ends-with-newline (elast (clu-file-nodes clu-file)))))
       (setf (clu-file-nodes clu-file)
-          (nconc (clu-file-nodes clu-file)
-                 (list
-                  (%make-indent-node 0 nil)))))
+            (nconc (clu-file-nodes clu-file)
+                   (list
+                    (%make-indent-node 0 nil)))))
     (setf (clu-file-nodes clu-file)
           (nconc (clu-file-nodes clu-file)
                  (list
@@ -251,16 +262,18 @@
         (clu (clu-file-clu clu-file)))
     (clu-remove-dir clu dir-path)))
 
-(defun clu-file-add-system (clu-file dir-path path type)
+(defun clu-file-add-system (clu-file dir-path system-path type)
   (clu-file-ensure-clu clu-file)
   (let ((*%eol-sequence* (cdr (assoc (clu-file-eol-style clu-file) *%eol-sequences*)))
-        (clu (clu-file-clu clu-file)))
-    (clu-add-system clu dir-path path type)))
+        (clu (clu-file-clu clu-file))
+        (rel-path (%relative-pathname system-path (clu-file-path clu-file))))
+    (clu-add-system clu dir-path rel-path type)))
 
 (defun clu-file-remove-system (clu-file dir-path system-path)
   (let ((*%eol-sequence* (cdr (assoc (clu-file-eol-style clu-file) *%eol-sequences*)))
-        (clu (clu-file-clu clu-file)))
-    (clu-remove-system clu dir-path system-path)))
+        (clu (clu-file-clu clu-file))
+        (rel-path (%relative-pathname system-path (clu-file-path clu-file))))
+    (clu-remove-system clu dir-path rel-path)))
 
 (defun clu-file-plist (clu-file)
   (when-let ((clu (clu-file-clu clu-file)))

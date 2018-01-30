@@ -28,6 +28,7 @@
    #:%item-after
    #:%guess-eol-style
    #:%read-from-file
+   #:%pathname-equal
    #:%expand-pathname
    #:%relative-pathname
    #:%ensure-relative-pathname))
