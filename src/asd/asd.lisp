@@ -469,9 +469,18 @@
     :type list
     :accessor asd-file-nodes)))
 
-(defmethod initialize-instance :after ((obj asd-file) &key)
-  (setf (slot-value obj 'nodes) (to-list (%parse-sexp-file (asd-file-path obj)))
-        (slot-value obj 'eol-style) (%guess-eol-style (asd-file-path obj) :unix)))
+(defmethod initialize-instance :after ((obj asd-file) &key (eol-style *%eol-style* eol-style-sup-p))
+  (check-type eol-style %eol-style)
+  (cond
+    ((probe-file (asd-file-path obj))
+     (setf (slot-value obj 'nodes) (to-list (%parse-sexp-file (asd-file-path obj)))
+           (slot-value obj 'eol-style)
+           (if eol-style-sup-p
+               eol-style
+               (%guess-eol-style (asd-file-path obj) *%eol-style*))))
+    (t
+     (setf (slot-value obj 'nodes) nil
+           (slot-value obj 'eol-style) eol-style))))
 
 (defun read-asd-file (path)
   (make-instance 'asd-file :path path))

@@ -224,9 +224,18 @@
     :type list
     :accessor clu-file-nodes)))
 
-(defmethod initialize-instance :after ((obj clu-file) &key)
-  (setf (slot-value obj 'nodes) (to-list (%parse-sexp-file (clu-file-path obj)))
-        (slot-value obj 'eol-style) (%guess-eol-style (clu-file-path obj) :unix)))
+(defmethod initialize-instance :after ((obj clu-file) &key (eol-style *%eol-style* eol-style-sup-p))
+  (check-type eol-style %eol-style)
+  (cond
+    ((probe-file (clu-file-path obj))
+     (setf (slot-value obj 'nodes) (to-list (%parse-sexp-file (clu-file-path obj)))
+           (slot-value obj 'eol-style)
+           (if eol-style-sup-p
+               eol-style
+               (%guess-eol-style (clu-file-path obj) eol-style))))
+    (t
+     (setf (slot-value obj 'nodes) nil
+           (slot-value obj 'eol-style) eol-style))))
 
 (defun read-clu-file (path)
   (make-instance 'clu-file :path (pathname path)))
