@@ -117,7 +117,10 @@
       (error "dir does not exist at path: '~A'" dir-path))
     (dir-ensure-items dir)
     (let ((items (dir-node-items dir)))
-      (when (efirst* (vchildren items) (lambda (c) (and (%dir-node-p c) (string= (string-node-string (dir-node-name c)) name))))
+      (when (-> (vchildren items)
+                (where #'%dir-node-p)
+                (any* (lambda (c)
+                        (string= (string-node-string (dir-node-name c)) name))))
         (error "dir already contains dir with name '~A'" name))
       (%append-to-list-node
        items
@@ -147,10 +150,11 @@
       (error "dir does not exist at path: '~A'" dir-path))
     (dir-ensure-items dir)
     (let ((items (dir-node-items dir)))
-      (when (efirst* (vchildren items)
-                     (lambda (sys-node)
-                       (%pathname-equal (string-node-string (system-node-path sys-node))
-                                        system-path)))
+      (when (-> (vchildren items)
+                (where #'%system-node-p)
+                (any* (lambda (sys-node)
+                        (%pathname-equal (string-node-string (system-node-path sys-node))
+                                         system-path))))
         (error "clu already contains system '~A'" system-path))
       (%append-to-list-node
        items
@@ -175,10 +179,12 @@
     (let ((items (dir-node-items dir)))
       (unless items
         (error "no such system '~A' at path '~A'" system-path dir-path))
-      (let ((system (efirst* (vchildren items)
-                             (lambda (sys-node)
-                               (%pathname-equal (string-node-string (system-node-path sys-node))
-                                                system-path)))))
+      (let ((system (-> (vchildren items)
+                        (where #'%system-node-p)
+                        (where (lambda (sys-node)
+                                  (%pathname-equal (string-node-string (system-node-path sys-node))
+                                                   system-path)))
+                        (efirst))))
         (unless system
           (error "no such system '~A' at path '~A'" system-path dir-path))
         (%delete-from-list-node items system)))))
