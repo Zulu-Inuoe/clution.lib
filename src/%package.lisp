@@ -17,8 +17,10 @@
    #:parse-float)
   (:export
    ;;;util
+   #:%eol-style
+   #:*%eol-style*
    #:*%eol-sequences*
-   #:*%eol-sequence*
+   #:%eol-sequence
 
    #:%whitespacep
    #:%terminating-p

@@ -218,7 +218,7 @@
     :initform (error "clu-file: must supply path")
     :reader clu-file-path)
    (eol-style
-    :type (member :windows :unix :old-mac)
+    :type %eol-style
     :reader clu-file-eol-style)
    (nodes
     :type list
@@ -240,7 +240,7 @@
 
 (defun clu-file-ensure-clu (clu-file
                             &aux
-                              (*%eol-sequence* (cdr (assoc (clu-file-eol-style clu-file) *%eol-sequences*))))
+                              (*%eol-style* (clu-file-eol-style clu-file)))
   (unless (clu-file-clu clu-file)
     (when (and (any (clu-file-nodes clu-file))
                (not (%opaque-node-ends-with-newline (elast (clu-file-nodes clu-file)))))
@@ -259,24 +259,24 @@
 
 (defun clu-file-add-dir (clu-file dir-path name)
   (clu-file-ensure-clu clu-file)
-  (let* ((*%eol-sequence* (cdr (assoc (clu-file-eol-style clu-file) *%eol-sequences*)))
+  (let* ((*%eol-style* (clu-file-eol-style clu-file))
          (clu (clu-file-clu clu-file)))
     (clu-add-dir clu dir-path name)))
 
 (defun clu-file-remove-dir (clu-file dir-path)
-  (let ((*%eol-sequence* (cdr (assoc (clu-file-eol-style clu-file) *%eol-sequences*)))
+  (let ((*%eol-style* (clu-file-eol-style clu-file))
         (clu (clu-file-clu clu-file)))
     (clu-remove-dir clu dir-path)))
 
 (defun clu-file-add-system (clu-file dir-path system-path type)
   (clu-file-ensure-clu clu-file)
-  (let ((*%eol-sequence* (cdr (assoc (clu-file-eol-style clu-file) *%eol-sequences*)))
+  (let ((*%eol-style* (clu-file-eol-style clu-file))
         (clu (clu-file-clu clu-file))
         (rel-path (%relative-pathname system-path (clu-file-path clu-file))))
     (clu-add-system clu dir-path rel-path type)))
 
 (defun clu-file-remove-system (clu-file dir-path system-path)
-  (let ((*%eol-sequence* (cdr (assoc (clu-file-eol-style clu-file) *%eol-sequences*)))
+  (let ((*%eol-style* (clu-file-eol-style clu-file))
         (clu (clu-file-clu clu-file))
         (rel-path (%relative-pathname system-path (clu-file-path clu-file))))
     (clu-remove-system clu dir-path rel-path)))

@@ -340,7 +340,7 @@
   (let ((prefix-whitespace
           (with-output-to-string (res)
             (unless skip-newline-p
-              (do-enumerable (c *%eol-sequence*)
+              (do-enumerable (c (%eol-sequence))
                 (format res "~C" c)))
             (format res "~A" (make-string indent :initial-element #\Space)))))
     (make-instance 'sexp-whitespace-node

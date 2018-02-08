@@ -52,15 +52,18 @@ That is, if it is either a macro character that is terminatting, or if it is whi
     (car cell)
     default))
 
+(deftype %eol-style ()
+  '(member :old-mac :unix :windows))
+
 (defvar *%eol-sequences*
   (list
    (cons :windows '(#\Return #\Newline))
    (cons :unix '(#\Newline))
    (cons :old-mac '(#\Return))))
 
-(defvar *%eol-sequence* '(#\Newline))
+(defvar *%eol-style* :unix)
 
-(defun %guess-eol-style (file-path &optional (default :unix))
+(defun %guess-eol-style (file-path &optional (default *%eol-style*))
   (let ((scores
           (list
            (cons :windows 0)
@@ -88,6 +91,10 @@ That is, if it is either a macro character that is terminatting, or if it is whi
        default)
       (t ;;Possibly mixed, but return most popular
        (caar scores)))))
+
+(defun %eol-sequence (&optional (style *%eol-style*))
+  (check-type style %eol-style)
+  (cdr (assoc style *%eol-sequences*)))
 
 (defun %read-from-file (filename &rest args
                         &key

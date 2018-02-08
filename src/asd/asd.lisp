@@ -463,7 +463,7 @@
     :initform (error "asd-file: must supply path")
     :reader asd-file-path)
    (eol-style
-    :type (member :windows :unix :old-mac)
+    :type %eol-style
     :reader asd-file-eol-style)
    (nodes
     :type list
@@ -497,7 +497,7 @@
     (unless system
       (error "system does not exist: '~A'" system-name))
 
-    (let ((*%eol-sequence* (cdr (assoc (asd-file-eol-style asd-file) *%eol-sequences*))))
+    (let ((*%eol-style* (asd-file-eol-style asd-file)))
       (system-add-file-component system (cdr component-path) component-name))))
 
 (defun asd-file-add-module-component (asd-file component-path component-name
@@ -509,7 +509,7 @@
     (unless system
       (error "system does not exist: '~A'" system-name))
 
-    (let ((*%eol-sequence* (cdr (assoc (asd-file-eol-style asd-file) *%eol-sequences*))))
+    (let ((*%eol-style* (asd-file-eol-style asd-file)))
       (system-add-module-component system (cdr component-path) component-name))))
 
 (defun asd-file-add-static-file-component (asd-file component-path component-name
@@ -521,7 +521,7 @@
     (unless system
       (error "system does not exist: '~A'" system-name))
 
-    (let ((*%eol-sequence* (cdr (assoc (asd-file-eol-style asd-file) *%eol-sequences*))))
+    (let ((*%eol-style* (asd-file-eol-style asd-file)))
       (system-add-static-file-component system (cdr component-path) component-name))))
 
 (defun asd-file-rename-component (asd-file component-path new-name
@@ -533,7 +533,7 @@
     (unless system
       (error "system does not exist: '~A'" system-name))
 
-    (let ((*%eol-sequence* (cdr (assoc (asd-file-eol-style asd-file) *%eol-sequences*))))
+    (let ((*%eol-style* (asd-file-eol-style asd-file)))
       (system-rename-component system (rest component-path) new-name))))
 
 (defun asd-file-move-component-up (asd-file component-path
@@ -545,7 +545,7 @@
     (unless system
       (error "system does not exist: '~A'" system-name))
 
-    (let ((*%eol-sequence* (cdr (assoc (asd-file-eol-style asd-file) *%eol-sequences*))))
+    (let ((*%eol-style* (asd-file-eol-style asd-file)))
       (system-move-component-up system (rest component-path)))))
 
 (defun asd-file-move-component-down (asd-file component-path
@@ -557,7 +557,7 @@
     (unless system
       (error "system does not exist: '~A'" system-name))
 
-    (let ((*%eol-sequence* (cdr (assoc (asd-file-eol-style asd-file) *%eol-sequences*))))
+    (let ((*%eol-style* (asd-file-eol-style asd-file)))
       (system-move-component-down system (rest component-path)))))
 
 (defun asd-file-remove-component (asd-file component-path
@@ -569,7 +569,7 @@
     (unless system
       (error "system does not exist: '~A'" system-name))
 
-    (let ((*%eol-sequence* (cdr (assoc (asd-file-eol-style asd-file) *%eol-sequences*))))
+    (let ((*%eol-style* (asd-file-eol-style asd-file)))
       (system-remove-component system (rest component-path)))))
 
 (defun asd-file-add-depends-on (asd-file component-path dependency-name
@@ -581,7 +581,7 @@
     (unless system
       (error "system does not exist: '~A'" system-name))
 
-    (let ((*%eol-sequence* (cdr (assoc (asd-file-eol-style asd-file) *%eol-sequences*))))
+    (let ((*%eol-style* (asd-file-eol-style asd-file)))
       (system-add-depends-on system (rest component-path) dependency-name))))
 
 (defun asd-file-remove-depends-on (asd-file component-path dependency-name
@@ -593,5 +593,5 @@
     (unless system
       (error "system does not exist: '~A'" system-name))
 
-    (let ((*%eol-sequence* (cdr (assoc (asd-file-eol-style asd-file) *%eol-sequences*))))
+    (let ((*%eol-style* (asd-file-eol-style asd-file)))
       (system-remove-depends-on system (rest component-path) dependency-name))))
