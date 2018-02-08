@@ -24,6 +24,7 @@
    #:asd-file-system-plists
    #:asd-file-add-file-component
    #:asd-file-add-module-component
+   #:asd-file-add-static-file-component
    #:asd-file-rename-component
    #:asd-file-move-component-up
    #:asd-file-move-component-down

@@ -58,6 +58,15 @@
     ;;TODO need pathname handling
     ))
 
+(defun %coerce-path-string-static-file (path)
+  (etypecase path
+    (sexp-symbol-node
+     (parse-namestring (string-downcase (symbol-node-name path))))
+    (sexp-string-node
+     (parse-namestring (string-node-string path)))
+    ;;TODO need pathname handling
+    ))
+
 (defun %file-node-p (component)
   (and (%list-node-p component)
        (%symbol-node-p (sexp-list-nth component 0))
@@ -67,6 +76,11 @@
   (and (%list-node-p component)
        (%symbol-node-p (sexp-list-nth component 0))
        (sexp-symbol-match (sexp-list-nth component 0) "MODULE" :keyword)))
+
+(defun %static-file-node-p (component)
+  (and (%list-node-p component)
+       (%symbol-node-p (sexp-list-nth component 0))
+       (sexp-symbol-match (sexp-list-nth component 0) "STATIC-FILE" :keyword)))
 
 (defun %system-node-p (node)
   (and (%list-node-p node)
@@ -118,6 +132,23 @@
     (push (make-instance 'sexp-symbol-node :name "COMPONENTS" :package :keyword) nodes)
     (push (%make-indent-node indent nil) nodes)
     (push (make-instance 'sexp-list-node :children ()) nodes)
+
+    (make-instance
+     'sexp-list-node
+     :parent parent
+     :children (nreverse nodes))))
+
+(defun %create-static-file-component (name &key parent pathname)
+  (let ((nodes ()))
+    (push (make-instance 'sexp-symbol-node :name "STATIC-FILE" :package :keyword) nodes)
+    (push (make-instance 'sexp-whitespace-node :text " ") nodes)
+    (push (%coerce-name-node name) nodes)
+
+    (when pathname
+      (push (make-instance 'sexp-whitespace-node :text " ") nodes)
+      (push (make-instance 'sexp-symbol-node :name "PATHNAME" :package :keyword) nodes)
+      (push (make-instance 'sexp-whitespace-node :text " ") nodes)
+      (push (%coerce-path-node pathname)  nodes))
 
     (make-instance
      'sexp-list-node
@@ -235,19 +266,24 @@
   (let ((plist (list))
         (pathname
           (namestring
-           (if (%file-node-p component)
-               (uiop:merge-pathnames*
-                (%coerce-path-string-file
+           (%expand-pathname
+            (cond
+              ((%file-node-p component)
+               (%coerce-path-string-file
                  (or
                   (component-pathname component)
-                  (component-name component)))
-                dir)
-               (uiop:merge-pathnames*
-                (%coerce-path-string-module
+                  (component-name component))))
+              ((%module-node-p component)
+               (%coerce-path-string-module
                  (or
                   (component-pathname component)
-                  (component-name component)))
-                dir)))))
+                  (component-name component))))
+              ((%static-file-node-p component)
+               (%coerce-path-string-static-file
+                 (or
+                  (component-pathname component)
+                  (component-name component)))))
+            dir))))
     (flet ((add-prop (name value)
              (push name plist)
              (push value plist)))
@@ -263,6 +299,8 @@
                      (-> (vchildren components)
                          (select (lambda (c) (component-plist c (uiop:pathname-directory-pathname pathname))))
                          (to-list)))))
+        ((%static-file-node-p component)
+         (add-prop :type :static-file))
         (t
          (error "malformed component"))))
     (nreverse plist)))
@@ -273,7 +311,7 @@
           (namestring
            (or
             (when-let ((pathname (system-pathname system)))
-              (uiop:merge-pathnames*
+              (%expand-pathname
                (%coerce-path-string-file pathname)
                (uiop:pathname-directory-pathname path)))
             (uiop:pathname-directory-pathname path)))))
@@ -339,6 +377,18 @@
       (%append-to-list-node
        components
        (%create-module-component name :parent components :pathname pathname)))))
+
+(defun system-add-static-file-component (system module-path name &key pathname)
+  (setf module-path (%coerce-component-path module-path))
+  (let ((module (system-component-by-path system  module-path)))
+    (unless module
+      (error "module does not exist: '~A'" module-path))
+    (when (module-component-by-path module (%coerce-component-path name))
+      (error "component already exists in module: ~A" name))
+    (module-ensure-components module)
+
+    (let ((components (module-components module)))
+      (%append-to-list-node components (%create-static-file-component name :pathname pathname)))))
 
 (defun system-remove-component (system component-path)
   (setf component-path (%coerce-component-path component-path))
@@ -461,6 +511,18 @@
 
     (let ((*%eol-sequence* (cdr (assoc (asd-file-eol-style asd-file) *%eol-sequences*))))
       (system-add-module-component system (cdr component-path) component-name))))
+
+(defun asd-file-add-static-file-component (asd-file component-path component-name
+                                           &aux
+                                             (system-name (first component-path)))
+  (let ((system (efirst* (asd-file-systems asd-file)
+                         (lambda (system)
+                           (string= (%coerce-name-string (system-name system)) system-name)))))
+    (unless system
+      (error "system does not exist: '~A'" system-name))
+
+    (let ((*%eol-sequence* (cdr (assoc (asd-file-eol-style asd-file) *%eol-sequences*))))
+      (system-add-static-file-component system (cdr component-path) component-name))))
 
 (defun asd-file-rename-component (asd-file component-path new-name
                                   &aux
