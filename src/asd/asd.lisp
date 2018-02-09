@@ -159,7 +159,8 @@
   (let ((name-prop
           (or
            (sexp-list-getf component "FILE")
-           (sexp-list-getf component "MODULE"))))
+           (sexp-list-getf component "MODULE")
+           (sexp-list-getf component "STATIC-FILE"))))
     (unless (and name-prop (%string-node-p name-prop))
       (error "malformed component: '~A'" component))
     name-prop))
@@ -302,7 +303,7 @@
         ((%static-file-node-p component)
          (add-prop :type :static-file))
         (t
-         (error "malformed component"))))
+         (error "malformed component '~A'" component))))
     (nreverse plist)))
 
 (defun system-plist (system path)
