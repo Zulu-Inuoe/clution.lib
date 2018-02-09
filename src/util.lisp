@@ -127,6 +127,43 @@ That is, if it is either a macro character that is terminatting, or if it is whi
    (namestring p1)
    (namestring p2)))
 
+(defun %pathname-as-directory (pathname)
+  "This function returns a pathname representing `pathname' in a form that the
+operating system will interpret as the name of a directory (a directory name).
+On most systems, this means appending a slash to the string (if it does not already end in one)."
+  (setf pathname (pathname pathname))
+  (cond
+    ((uiop:directory-pathname-p pathname)
+     pathname)
+    (t
+     (let* ((name.type
+              (cond
+                ((and (pathname-name pathname)
+                      (pathname-type pathname))
+                 (format nil "~A.~A" (pathname-name pathname) (pathname-type pathname)))
+                ((pathname-name pathname)
+                 (pathname-name pathname))
+                ((pathname-type pathname)
+                 (pathname-type pathname))
+                (t
+                 nil)))
+            (dir-list
+              (if-let ((lst (uiop:normalize-pathname-directory-component
+                             (pathname-directory pathname))))
+                lst
+                '(:relative))))
+       (make-pathname
+        :host (pathname-host pathname)
+        :device (pathname-device pathname)
+        :directory
+        (uiop:denormalize-pathname-directory-component
+         (append
+          dir-list
+          (if name.type (list name.type) nil)))
+        :name nil
+        :type nil
+        :version (pathname-version pathname))))))
+
 (defun %resolve-directives (pathname
                             &aux
                               (device (pathname-device pathname))
@@ -181,14 +218,14 @@ foo/../../bar/ => ../bar/"
 
 (defun %expand-pathname (pathname &optional (base *default-pathname-defaults*))
   (%resolve-directives
-   (uiop:merge-pathnames* pathname (uiop:merge-pathnames* base))))
+   (uiop:merge-pathnames* pathname (uiop:merge-pathnames* (%pathname-as-directory base)))))
 
 (defun %relative-pathname (pathname &optional (base *default-pathname-defaults*))
   "This function tries to return a relative name that is equivalent to filename, assuming the result will be interpreted relative to directory (an absolute directory name or directory file name). If directory is omitted or nil, it defaults to the current buffer's default directory.
 
 On some operating systems, an absolute file name begins with a device name. On such systems, filename has no relative equivalent based on directory if they start with two different device names. In this case, file-relative-name returns filename in absolute form."
   (setf pathname (%expand-pathname pathname)
-        base (uiop:pathname-directory-pathname (%expand-pathname base)))
+        base (%pathname-as-directory (%expand-pathname base)))
   (let (subpath)
     (cond
       ((not (equalp (pathname-device pathname) (pathname-device base)))
@@ -241,3 +278,18 @@ On some operating systems, an absolute file name begins with a device name. On s
     (when (uiop:absolute-pathname-p pathname)
       (error "could not make pathname relative: ~A" pathname))
     ret))
+
+(defun %app-data-dir (app-name)
+  "Directory for storing per-user per-application data files."
+  (%pathname-as-directory
+   #+windows
+   (%expand-pathname
+    "data"
+    (%expand-pathname
+     app-name
+     (uiop:getenv "LOCALAPPDATA")))
+   #-windows
+   (%expand-pathname
+    app-name
+    (or (uiop:getenv "XDG_DATA_HOME")
+        "~/.local/share/"))))

@@ -31,6 +31,8 @@
    #:%guess-eol-style
    #:%read-from-file
    #:%pathname-equal
+   #:%pathname-as-directory
    #:%expand-pathname
    #:%relative-pathname
-   #:%ensure-relative-pathname))
+   #:%ensure-relative-pathname
+   #:%app-data-dir))
