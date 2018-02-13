@@ -37,6 +37,8 @@
    #:%directory-pathname
    #:%directory-name
    #:%ensure-relative-pathname
+   #:%path-combine
+   #:%copy-directory
    #:%app-data-dir
    #:%app-config-dir
    #:%app-temp-dir))
