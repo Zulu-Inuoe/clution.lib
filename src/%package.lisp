@@ -37,4 +37,6 @@
    #:%directory-pathname
    #:%directory-name
    #:%ensure-relative-pathname
-   #:%app-data-dir))
+   #:%app-data-dir
+   #:%app-config-dir
+   #:%app-temp-dir))

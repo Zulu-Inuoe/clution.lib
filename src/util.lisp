@@ -326,5 +326,25 @@ On some operating systems, an absolute file name begins with a device name. On s
    #-windows
    (%expand-pathname
     app-name
-    (or (uiop:getenv "XDG_DATA_HOME")
-        "~/.local/share/"))))
+    (uiop:xdg-data-home))))
+
+(defun %app-config-dir (app-name)
+  "Directory for storing per-user per-application configuration files."
+  (%pathname-as-directory
+   #+windows
+   (%expand-pathname
+    "config"
+    (%expand-pathname
+     app-name
+     (uiop:getenv "LOCALAPPDATA")))
+   #-windows
+   (%expand-pathname
+    app-name
+    (uiop:xdg-config-home))))
+
+(defun %app-temp-dir (app-name)
+  "Directory for storing per-application temporary files."
+  (%pathname-as-directory
+   (%expand-pathname
+    app-name
+    (uiop:temporary-directory))))
