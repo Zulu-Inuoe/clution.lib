@@ -190,26 +190,85 @@
         (%delete-from-list-node items system)))))
 
 (defun clu-plist (clu path)
-  (let ((plist (list))
-        (pathname (namestring path)))
+  ;;TODO Refactor to use the proper clu objects rather than repeating code
+  (let* ((plist (list))
+         (dir (uiop:pathname-directory-pathname path))
+         (clu-dir
+           (%pathname-as-directory
+            (%expand-pathname
+             (if-let ((clu-dir (clu-clu-dir clu)))
+               (string-node-string clu-dir)
+               ".clu/")
+             dir)))
+         (qlfile-libs-dir
+           (%pathname-as-directory
+            (%expand-pathname
+             "qlfile-libs"
+             clu-dir))))
     (push :clution plist)
     (flet ((add-prop (prop-name prop-value)
              (push prop-name plist)
              (push prop-value plist)))
-      (add-prop :path pathname)
+      (add-prop :path (namestring path))
       (add-prop :items
                 (when-let ((items (clu-items clu)))
                   (-> (vchildren items)
                       (select (lambda (i) (clu-item-plist i path)))
                       (to-list))))
-      (add-prop :clu-dir
-                (namestring
-                 (%expand-pathname
-                  (if-let ((clu-dir (clu-clu-dir clu)))
-                    (string-node-string clu-dir)
-                    ".clu/")
-                  (uiop:pathname-directory-pathname path)))))
+      (add-prop :clu-dir (namestring clu-dir))
+      (add-prop :qlfile-libs-dir (namestring qlfile-libs-dir)))
     (nreverse plist)))
+
+(defclass clu-file-item ()
+  ((clu-file
+    :type clu-file
+    :initarg :clu-file
+    :initform (error "clu-file-item: must supply clu")
+    :reader clu-file-item-clu-file)
+   (node
+    :type sexp-list-node
+    :initarg :node
+    :initform (error "clu-file-item: must supply node")
+    :reader clu-file-item-node)
+   (parent
+    :type clu-file-item
+    :initarg :parent
+    :initform nil
+    :reader clu-file-item-parent)))
+
+(defclass clu-file-dir-item (clu-file-item)
+  ())
+
+(defun clu-file-dir-item-items (clu-file-dir-item
+                                &aux
+                                  (clu (clu-file-item-clu-file clu-file-dir-item)))
+  (when-let (items-node (dir-node-items (clu-file-item-node clu-file-dir-item)))
+    (-> (vchildren items-node)
+        (select (lambda (node)
+                  (cond
+                    ((%dir-node-p node)
+                     (make-instance 'clu-file-dir-item :clu clu :node node :parent clu-file-dir-item))
+                    ((%system-node-p node)
+                     (make-instance 'clu-file-system-item :clu clu :node node :parent clu-file-dir-item))
+                    (t
+                     (error "malformed clu item: '~A'" node))))))))
+
+(defun clu-file-dir-item-systems (clu-file-dir-item)
+  (-> (clu-file-dir-item-items clu-file-dir-item)
+      (select-many (lambda (item)
+                     (etypecase item
+                       (clu-file-dir-item
+                        (clu-file-dir-item-systems item))
+                       (clu-file-system-item
+                        (list item)))))))
+
+(defclass clu-file-system-item (clu-file-item)
+  ())
+
+(defun clu-file-system-item-path (clu-file-system-item)
+  (%expand-pathname
+   (string-node-string (system-node-path (clu-file-item-node clu-file-system-item)))
+   (clu-file-dir (clu-file-item-clu-file clu-file-system-item))))
 
 (defclass clu-file ()
   ((path
@@ -237,6 +296,53 @@
      (setf (slot-value obj 'nodes) nil
            (slot-value obj 'eol-style) eol-style))))
 
+(defun clu-file-dir (clu-file)
+  (uiop:pathname-directory-pathname (clu-file-path clu-file)))
+
+(defun clu-file-clu-dir (clu-file)
+  (%pathname-as-directory
+   (%expand-pathname
+    (if-let (clu-dir-node
+             (when-let (clu (clu-file-clu clu-file))
+               (clu-clu-dir clu)))
+      (string-node-string clu-dir-node)
+      ".clu")
+    (clu-file-dir clu-file))))
+
+(defun clu-file-qlfile-fetch-dir (clu-file)
+  (%pathname-as-directory
+   (%expand-pathname
+    "qlfile-fetch"
+    (clu-file-clu-dir clu-file))))
+
+(defun clu-file-qlfile-libs-dir (clu-file)
+  (%pathname-as-directory
+   (%expand-pathname
+    "qlfile-libs"
+    (clu-file-clu-dir clu-file))))
+
+(defun clu-file-items (clu-file)
+  (when-let* ((clu-node (clu-file-clu clu-file))
+              (items-node (clu-items clu-node)))
+    (-> (vchildren items-node)
+        (select (lambda (node)
+                  (cond
+                    ((%dir-node-p node)
+                     (make-instance 'clu-file-dir-item :clu-file clu-file :node node))
+                    ((%system-node-p node)
+                     (make-instance 'clu-file-system-item :clu-file clu-file :node node))
+                    (t
+                     (error "malformed clu item: '~A'" node))))))))
+
+(defun clu-file-systems (clu-file)
+  (-> (clu-file-items clu-file)
+      (select-many (lambda (item)
+                     (etypecase item
+                       (clu-file-dir-item
+                        (clu-file-dir-item-systems item))
+                       (clu-file-system-item
+                        (list item)))))))
+
 (defun read-clu-file (path)
   (make-instance 'clu-file :path (pathname path)))
 
@@ -245,7 +351,7 @@
     (%write-node node stream)))
 
 (defun clu-file-clu (clu-file)
-  (efirst (clu-file-nodes clu-file) #'%clu-node-p))
+  (efirst* (clu-file-nodes clu-file) #'%clu-node-p))
 
 (defun clu-file-ensure-clu (clu-file
                             &aux
@@ -281,13 +387,13 @@
   (clu-file-ensure-clu clu-file)
   (let ((*%eol-style* (clu-file-eol-style clu-file))
         (clu (clu-file-clu clu-file))
-        (rel-path (%relative-pathname system-path (clu-file-path clu-file))))
+        (rel-path (%relative-pathname system-path (clu-file-dir clu-file))))
     (clu-add-system clu dir-path rel-path type)))
 
 (defun clu-file-remove-system (clu-file dir-path system-path)
   (let ((*%eol-style* (clu-file-eol-style clu-file))
         (clu (clu-file-clu clu-file))
-        (rel-path (%relative-pathname system-path (clu-file-path clu-file))))
+        (rel-path (%relative-pathname system-path (clu-file-dir clu-file))))
     (clu-remove-system clu dir-path rel-path)))
 
 (defun clu-file-plist (clu-file)

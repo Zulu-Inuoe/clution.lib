@@ -18,6 +18,19 @@
    #:enumerable
    #:parse-float)
   (:export
+   #:asd-file-system-component
+   #:asd-file-system-component-name
+   #:asd-file-system-component-path
+
+   #:asd-file-system-file-component
+   #:asd-file-system-module-component
+   #:asd-file-system-static-file-component
+
+   #:asd-file-system
+   #:asd-file-system-components
+
+   #:asd-file
+   #:asd-file-systems
    #:read-asd-file
    #:write-asd-file
 

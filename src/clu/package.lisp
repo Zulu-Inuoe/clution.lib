@@ -19,6 +19,23 @@
    #:parse-float)
   (:export
    ;;;clu
+   #:clu-file-item
+
+   #:clu-file-dir-item
+   #:clu-file-dir-item-items
+   #:clu-file-dir-item-systems
+
+   #:clu-file-system-item
+   #:clu-file-system-item-path
+
+   #:clu-file
+   #:clu-file-path
+   #:clu-file-dir
+   #:clu-file-clu-dir
+   #:clu-file-qlfile-fetch-dir
+   #:clu-file-qlfile-libs-dir
+   #:clu-file-items
+   #:clu-file-systems
    #:read-clu-file
    #:write-clu-file
 

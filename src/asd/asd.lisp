@@ -307,20 +307,20 @@
     (nreverse plist)))
 
 (defun system-plist (system path)
-  (let ((plist (list))
-        (pathname
-          (namestring
+  (let* ((plist (list))
+         (dir (uiop:pathname-directory-pathname path))
+         (pathname
            (or
-            (when-let ((pathname (system-pathname system)))
+            (when-let ((pathname-node (system-pathname system)))
               (%expand-pathname
-               (%coerce-path-string-file pathname)
-               (uiop:pathname-directory-pathname path)))
-            (uiop:pathname-directory-pathname path)))))
+               (%coerce-path-string-file pathname-node)
+               dir))
+            dir)))
     (flet ((add-prop (name value)
              (push name plist)
              (push value plist)))
       (add-prop :name (%coerce-name-string (system-name system)))
-      (add-prop :pathname pathname)
+      (add-prop :pathname (namestring pathname))
       (when-let ((components (system-components system)))
         (add-prop :components (-> (vchildren components)
                                   (select (lambda (c) (component-plist c (uiop:pathname-directory-pathname pathname))))
@@ -457,6 +457,145 @@
             (cell (member component (children components))))
         (rotatef (car next-cell) (car cell))))))
 
+(defclass asd-file-system-component ()
+  ((asd-file-system
+    :type asd-file-system
+    :initarg :asd-file-system
+    :initform (error "asd-file-system-component: must supply asd-file-system")
+    :reader asd-file-system-component-system)
+   (node
+    :type sexp-list-node
+    :initarg :node
+    :initform (error "asd-file-system-component: must supply node")
+    :reader asd-file-system-component-node)
+   (parent
+    :type (or null asd-file-system-component)
+    :initarg :parent
+    :initform nil
+    :reader asd-file-system-component-parent)))
+
+(defun asd-file-system-component-name (component)
+  (%coerce-name-string (component-name (asd-file-system-component-node component))))
+
+(defgeneric asd-file-system-component-path (component)
+  (:documentation "Calculates a pathname to `component'."))
+
+(defclass asd-file-system-file-component (asd-file-system-component)
+  ())
+
+(defmethod asd-file-system-component-path ((component asd-file-system-file-component))
+  (let ((parent-dir (if-let ((parent (asd-file-system-component-parent component)))
+                      (asd-file-system-component-path component)
+                      (asd-file-system-dir (asd-file-system-component-system component)))))
+    (%expand-pathname
+     (%coerce-path-string-file
+      (or (component-pathname (asd-file-system-component-node component))
+          (component-name (asd-file-system-component-node component))))
+     parent-dir)))
+
+(defclass asd-file-system-module-component (asd-file-system-component)
+  ())
+
+(defmethod asd-file-system-component-path ((component asd-file-system-module-component))
+  (let ((parent-dir (if-let ((parent (asd-file-system-component-parent component)))
+                      (asd-file-system-component-path component)
+                      (asd-file-system-dir (asd-file-system-component-system component)))))
+    (%pathname-as-directory
+     (%expand-pathname
+      (%coerce-path-string-module
+       (or (component-pathname (asd-file-system-component-node component))
+           (component-name (asd-file-system-component-node component))))
+      parent-dir))))
+
+(defun asd-file-system-module-component-components (module
+                                                    &aux
+                                                      (asd-file-system (asd-file-system-component-system module)))
+  (when-let (module-components (module-components (asd-file-system-component-node module)))
+    (-> (vchildren module-components)
+        (select (lambda (node)
+                  (cond
+                    ((%file-node-p node)
+                     (make-instance 'asd-file-system-file-component
+                                    :asd-file-system asd-file-system
+                                    :node node
+                                    :parent module))
+                    ((%module-node-p node)
+                     (make-instance 'asd-file-system-module-component
+                                    :asd-file-system asd-file-system
+                                    :node node
+                                    :parent module))
+                    ((%static-file-node-p node)
+                     (make-instance 'asd-file-system-static-file-component
+                                    :asd-file-system asd-file-system
+                                    :node node
+                                    :parent module))
+                    (t
+                     (error "asd-file-system: unrecognized component node: '~A'" node))))))))
+
+(defclass asd-file-system-static-file-component (asd-file-system-component)
+  ())
+
+(defmethod asd-file-system-component-path ((component asd-file-system-static-file-component))
+  (let ((parent-dir (if-let ((parent (asd-file-system-component-parent component)))
+                      (asd-file-system-component-path component)
+                      (asd-file-system-dir (asd-file-system-component-system component)))))
+    (%expand-pathname
+     (%coerce-path-string-static-file
+      (or (component-pathname (asd-file-system-component-node component))
+           (component-name (asd-file-system-component-node component))))
+     parent-dir)))
+
+(defclass asd-file-system ()
+  ((asd-file
+    :type asd-file
+    :initarg :asd-file
+    :initform (error "asd-file-system: must supply asd-file")
+    :reader asd-file-system-file)
+   (node
+    :type sexp-list-node
+    :initarg :node
+    :initform (error "asd-file-system: must supply node")
+    :reader asd-file-system-node)))
+
+(defun asd-file-system-name (asd-file-system)
+  "Name of the system"
+  (-> (asd-file-system-node asd-file-system)
+      (sexp-list-nth 1)
+      (%coerce-name-string)))
+
+(defun asd-file-system-dir (asd-file-system
+                            &aux
+                              (base-dir (uiop:pathname-directory-pathname
+                                         (asd-file-path (asd-file-system-file asd-file-system)))))
+  "Base directory for system components."
+  (%pathname-as-directory
+   (or
+    (when-let ((pathname-node (system-pathname (asd-file-system-node asd-file-system))))
+      (%expand-pathname
+       (%coerce-path-string-file pathname-node)
+       base-dir))
+    base-dir)))
+
+(defun asd-file-system-components (asd-file-system)
+  (when-let (system-components (system-components (asd-file-system-node asd-file-system)))
+    (-> (vchildren system-components)
+        (select (lambda (node)
+                  (cond
+                    ((%file-node-p node)
+                     (make-instance 'asd-file-system-file-component
+                                    :asd-file-system asd-file-system
+                                    :node node))
+                    ((%module-node-p node)
+                     (make-instance 'asd-file-system-module-component
+                                    :asd-file-system asd-file-system
+                                    :node node))
+                    ((%static-file-node-p node)
+                     (make-instance 'asd-file-system-static-file-component
+                                    :asd-file-system asd-file-system
+                                    :node node))
+                    (t
+                     (error "asd-file-system: unrecognized component node: '~A'" node))))))))
+
 (defclass asd-file ()
   ((path
     :type pathname
@@ -469,6 +608,9 @@
    (nodes
     :type list
     :accessor asd-file-nodes)))
+
+(defun asd-file-dir (asd-file)
+  (uiop:pathname-directory-pathname (asd-file-path asd-file)))
 
 (defmethod initialize-instance :after ((obj asd-file) &key (eol-style *%eol-style* eol-style-sup-p))
   (check-type eol-style %eol-style)
@@ -491,53 +633,63 @@
     (%write-node node stream)))
 
 (defun asd-file-systems (asd-file)
-  (where (asd-file-nodes asd-file) #'%system-node-p))
+  (-> (asd-file-system-nodes asd-file)
+      (select (lambda (node)
+                (make-instance 'asd-file-system :asd-file asd-file :node node)))))
+
+(defun asd-file-system-nodes (asd-file)
+  (-> (asd-file-nodes asd-file)
+      (where #'%system-node-p)))
 
 (defun asd-file-system-plists (asd-file)
-  (-> (asd-file-systems asd-file)
+  (-> (asd-file-system-nodes asd-file)
       (select (lambda (system) (system-plist system (asd-file-path asd-file))))
       (to-list)))
 
 (defun asd-file-add-file-component (asd-file component-path component-name
                                     &aux
                                       (system-name (first component-path)))
-  (let ((system (efirst* (asd-file-systems asd-file)
+  (let ((system (efirst* (asd-file-system-nodes asd-file)
                          (lambda (system)
                            (string= (%coerce-name-string (system-name system)) system-name)))))
     (unless system
       (error "system does not exist: '~A'" system-name))
 
-    (let ((*%eol-style* (asd-file-eol-style asd-file)))
-      (system-add-file-component system (cdr component-path) component-name))))
+    (let ((*%eol-style* (asd-file-eol-style asd-file))
+          (rel-name (namestring (%relative-pathname component-name (asd-file-dir asd-file)))))
+      (system-add-file-component system (cdr component-path) rel-name))))
 
 (defun asd-file-add-module-component (asd-file component-path component-name
                                       &aux
                                         (system-name (first component-path)))
-  (let ((system (efirst* (asd-file-systems asd-file)
+  (let ((system (efirst* (asd-file-system-nodes asd-file)
                          (lambda (system)
                            (string= (%coerce-name-string (system-name system)) system-name)))))
     (unless system
       (error "system does not exist: '~A'" system-name))
 
-    (let ((*%eol-style* (asd-file-eol-style asd-file)))
-      (system-add-module-component system (cdr component-path) component-name))))
+    (let ((*%eol-style* (asd-file-eol-style asd-file))
+          (rel-name (namestring (%directory-pathname
+                                 (%relative-pathname component-name (asd-file-dir asd-file))))))
+      (system-add-module-component system (cdr component-path) rel-name))))
 
 (defun asd-file-add-static-file-component (asd-file component-path component-name
                                            &aux
                                              (system-name (first component-path)))
-  (let ((system (efirst* (asd-file-systems asd-file)
+  (let ((system (efirst* (asd-file-system-nodes asd-file)
                          (lambda (system)
                            (string= (%coerce-name-string (system-name system)) system-name)))))
     (unless system
       (error "system does not exist: '~A'" system-name))
 
-    (let ((*%eol-style* (asd-file-eol-style asd-file)))
-      (system-add-static-file-component system (cdr component-path) component-name))))
+    (let ((*%eol-style* (asd-file-eol-style asd-file))
+          (rel-name (namestring (%relative-pathname component-name (asd-file-dir asd-file)))))
+      (system-add-static-file-component system (cdr component-path) rel-name))))
 
 (defun asd-file-rename-component (asd-file component-path new-name
                                   &aux
                                     (system-name (first component-path)))
-  (let ((system (efirst* (asd-file-systems asd-file)
+  (let ((system (efirst* (asd-file-system-nodes asd-file)
                          (lambda (system)
                            (string= (%coerce-name-string (system-name system)) system-name)))))
     (unless system
@@ -549,7 +701,7 @@
 (defun asd-file-move-component-up (asd-file component-path
                                    &aux
                                      (system-name (first component-path)))
-  (let ((system (efirst* (asd-file-systems asd-file)
+  (let ((system (efirst* (asd-file-system-nodes asd-file)
                          (lambda (system)
                            (string= (%coerce-name-string (system-name system)) system-name)))))
     (unless system
@@ -561,7 +713,7 @@
 (defun asd-file-move-component-down (asd-file component-path
                                      &aux
                                        (system-name (first component-path)))
-  (let ((system (efirst* (asd-file-systems asd-file)
+  (let ((system (efirst* (asd-file-system-nodes asd-file)
                          (lambda (system)
                            (string= (%coerce-name-string (system-name system)) system-name)))))
     (unless system
@@ -573,7 +725,7 @@
 (defun asd-file-remove-component (asd-file component-path
                                   &aux
                                     (system-name (first component-path)))
-  (let ((system (efirst* (asd-file-systems asd-file)
+  (let ((system (efirst* (asd-file-system-nodes asd-file)
                          (lambda (system)
                            (string= (%coerce-name-string (system-name system)) system-name)))))
     (unless system
@@ -585,7 +737,7 @@
 (defun asd-file-add-depends-on (asd-file component-path dependency-name
                                 &aux
                                   (system-name (first component-path)))
-  (let ((system (efirst* (asd-file-systems asd-file)
+  (let ((system (efirst* (asd-file-system-nodes asd-file)
                          (lambda (system)
                            (string= (%coerce-name-string (system-name system)) system-name)))))
     (unless system
@@ -597,7 +749,7 @@
 (defun asd-file-remove-depends-on (asd-file component-path dependency-name
                                    &aux
                                      (system-name (first component-path)))
-  (let ((system (efirst* (asd-file-systems asd-file)
+  (let ((system (efirst* (asd-file-system-nodes asd-file)
                          (lambda (system)
                            (string= (%coerce-name-string (system-name system)) system-name)))))
     (unless system

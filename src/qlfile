@@ -5,3 +5,4 @@ github enumerable Zulu-Inuoe/enumerable
 ql parse-float :latest
 github trivial-cltl2 Zulu-Inuoe/trivial-cltl2
 ql trivial-features :latest
+ql qlot :latest
