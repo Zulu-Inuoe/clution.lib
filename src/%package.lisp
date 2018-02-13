@@ -34,5 +34,7 @@
    #:%pathname-as-directory
    #:%expand-pathname
    #:%relative-pathname
+   #:%directory-pathname
+   #:%directory-name
    #:%ensure-relative-pathname
    #:%app-data-dir))

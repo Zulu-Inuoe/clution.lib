@@ -273,6 +273,41 @@ On some operating systems, an absolute file name begins with a device name. On s
                          :defaults base))))))
            (climb base)))))))
 
+(defun %directory-pathname (pathname)
+  "This function returns a string representing dirname in a form that the operating system will interpret as the name of a file (a directory file name). On most systems, this means removing the final slash (or backslash) from the string."
+  (declare (optimize (debug 3)))
+  (setf pathname (pathname pathname))
+  (cond
+    ((uiop:file-pathname-p pathname)
+     pathname)
+    ((uiop:directory-pathname-p pathname)
+     (let* ((dir (uiop:normalize-pathname-directory-component
+                  (pathname-directory pathname)))
+            (name (lastcar dir)))
+       (cond
+         ((stringp name)
+          (uiop:merge-pathnames*
+           (pathname name)
+           (make-pathname
+            :host (pathname-host pathname)
+            :device (pathname-device pathname)
+            :directory (uiop:denormalize-pathname-directory-component (butlast dir))
+            :name nil
+            :type nil
+            :version nil)))
+         (t
+          pathname))))
+    (t
+     pathname)))
+
+(defun %directory-name (pathname)
+  "Get the name of the directory designated by `pathname'."
+  (setf pathname (%pathname-as-directory pathname))
+  (let ((name (lastcar (uiop:normalize-pathname-directory-component (pathname-directory pathname)))))
+    (typecase name
+      (string name)
+      (t ""))))
+
 (defun %ensure-relative-pathname (pathname &optional (base *default-pathname-defaults*))
   (let ((ret (%relative-pathname pathname base)))
     (when (uiop:absolute-pathname-p pathname)
