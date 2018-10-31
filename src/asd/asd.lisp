@@ -313,7 +313,7 @@
            (or
             (when-let ((pathname-node (system-pathname system)))
               (%expand-pathname
-               (%coerce-path-string-file pathname-node)
+               (%coerce-path-string-module pathname-node)
                dir))
             dir)))
     (flet ((add-prop (name value)
@@ -572,7 +572,7 @@
    (or
     (when-let ((pathname-node (system-pathname (asd-file-system-node asd-file-system))))
       (%expand-pathname
-       (%coerce-path-string-file pathname-node)
+       (%coerce-path-string-module pathname-node)
        base-dir))
     base-dir)))
 
